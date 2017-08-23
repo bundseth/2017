@@ -106,7 +106,23 @@ savefig(joinpath("img","3levelNOT.svg"))
 ```
 ![3-level NOT gate](img/3levelNOT.svg)
 
-Instead of working perfectly, our system leaks into the 2nd energy level (we'll quantify this [later](#fidelity)). This becomes problematic once we're trying 
+Instead of working perfectly, our system leaks into the 2nd energy level (we'll quantify this [later](#fidelity)). This becomes problematic once we're trying perform useful computations. DRAG is one possible remedy where introducing drive detuning and a second quadrature control, that is $$ℇ(t)=ℇ<sup>x</sup>(t)cos(ω<sub>d</sub>t)+ℇ<sup>y</sup>(t)sin(ω<sub>d</sub>t)$$, helps eliminate some of the leakage. Let's see how much of an improvement we get. We'll need to define a few more functions for the new controls.
+
+```@setup plot3
+using Schrodinger, PyPlot
+function rotgaussianpulse(t::Real,p::Vector)
+    # normalized pulse centered on t=0, begins and ends at 0
+    tg  = p[1] # gate time
+    σ   = p[2] # standard dev (0.5tg)
+    A   = p[3] # amplitude
+    B   = inv(√(2π)*σ*erf(tg/(√(8)*σ))-tg*gaussian(0.5tg,σ)) # normalize
+    Ɛˣ = A*B*(gaussian(t,σ)-gaussian(0.5tg,σ))
+    return Ɛˣ
+end
+
+```
+```jldoctest example1
+```
 
 ## Fidelity
 
