@@ -3,7 +3,7 @@ using Schrodinger, PyPlot
 function rotgaussianpulse(t::Real,p::Vector)
     # normalized pulse centered on t=0, begins and ends at 0
     tg  = p[1] # gate time
-    σ   = p[2] # standard dev (0.5tg)
+    σ   = p[2] # standard deviation
     A   = p[3] # amplitude
     B   = inv(√(2π)*σ*erf(tg/(√(8)*σ))-tg*gaussian(0.5tg,σ))
     Ɛˣ = A*B*(gaussian(t,σ)-gaussian(0.5tg,σ))
@@ -45,12 +45,12 @@ function detuning(t::Real,p::Vector)
     return δ₁
 end
 
-H = σx/2 # same as create(2)/2 + destroy(2)/2
+H = σx/2 # same as create(2)/2 + destroy(2)/2; using natural units where ħ=1
 
-g = basis(2,0)
-tg = 6e-9
-σ = 0.5tg
-tspan = (-tg/2,tg/2)
+g = basis(2,0) # begin in ground state
+tg = 6e-9 # gate time
+σ = 0.5tg # standard deviation of gaussian
+tspan = (-tg/2,tg/2) # pulse centred at t=0
 
 res1 = sesolve([qzero(2),(H,rotgaussianpulse,[tg,σ,π])],g,tspan,saveat=linspace(-tg/2,tg/2,100))
 !isdir("img") && mkdir("img")
