@@ -3,6 +3,88 @@ DocTestSetup  = quote
     using Schrodinger
 end
 ```
+```@setup plots
+using Schrodinger, PyPlot
+
+function rotgaussianpulse(t::Real,p::Vector)
+    # normalized pulse centered on t=0, begins and ends at 0
+    tg  = p[1] # gate time
+    σ   = p[2] # standard deviation
+    A   = p[3] # amplitude
+    B   = inv(√(2π)*σ*erf(tg/(√(8)*σ))-tg*gaussian(0.5tg,σ))
+    Ɛˣ = A*B*(gaussian(t,σ)-gaussian(0.5tg,σ))
+    return Ɛˣ
+end
+
+function DRAGx(t::Real,p::Vector)
+    # Ɛˣ for fifth order DRAG
+    tg  = p[1] # gate time
+    σ   = p[2] # standard deviation
+    A   = p[3] # amplitude
+    Δ   = p[4] # anharmonicity
+    λ   = p[5] # relative strength of transitions
+    Ɛˣ = rotgaussianpulse(t,[tg,σ,A]) + (λ^2-4)*rotgaussianpulse(t,[tg,σ,A])^3/(8*Δ^2) - (13λ^4-76λ^2+112)*rotgaussianpulse(t,[tg,σ,A])^5/(128Δ^4)
+    return Ɛˣ
+end
+
+function DRAGy(t::Real,p::Vector)
+    # Ɛʸ for fifth order DRAG
+    tg  = p[1] # gate time
+    σ   = p[2] # standard deviation
+    A   = p[3] # amplitude
+    Δ   = p[4] # anharmonicity
+    λ   = p[5] # relative strength of transitions
+    B   = inv(√(2π)*σ*erf(tg/(√(8)*σ))-tg*gaussian(0.5tg,σ))
+    Ɛˣ′ = A*B*Schrodinger.gaussianprime(t,σ)
+    Ɛʸ = -Ɛˣ′/Δ + 33*(λ^2-2)*rotgaussianpulse(t,[tg,σ,A])^2*Ɛˣ′/(24*Δ^3)
+    return Ɛʸ
+end
+
+function detuning(t::Real,p::Vector)
+    # dynamical detuning for fifth order DRAG
+    tg  = p[1] # gate time
+    σ   = p[2] # standard deviation
+    A   = p[3] # amplitude
+    Δ   = p[4] # anharmonicity
+    λ   = p[5] # relative strength of transitions
+    δ₁ = (λ^2-4)*rotgaussianpulse(t,[tg,σ,A])^2/(4*Δ) - (λ^4-7λ^2+12)*rotgaussianpulse(t,[tg,σ,A])^4/(16Δ^3)
+    return δ₁
+end
+
+H = σx/2 # same as create(2)/2 + destroy(2)/2; using natural units where ħ=1
+
+g = basis(2,0) # begin in ground state
+tg = 6e-9 # gate time
+σ = 0.5tg # standard deviation of gaussian
+tspan = (-tg/2,tg/2) # pulse centred at t=0
+
+res1 = sesolve([qzero(2),(H,rotgaussianpulse,[tg,σ,π])],g,tspan,saveat=linspace(-tg/2,tg/2,100))
+!isdir("img") && mkdir("img")
+plot(res1.times*1e9,levelprobs(res1.states)); xlabel("Time (ns)"); ylabel("Level Probabilities"); legend(["Ground State", "Excited State"]); grid()
+savefig(joinpath("img","qubitNOT.svg"))
+clf()
+
+Δ = 2π*(-400e6) # anharmonicity
+λ = √2 # relative transition strength
+Π₂ = basis(3,2) * basis(3,2)' # projector for the 2nd level
+Hc = Δ*Π₂ # constant Hamiltonian
+Hd = create(3)/2 + destroy(3)/2 # affected by Ɛˣ
+g = basis(3,0)
+
+res2 = sesolve([Hc,(Hd,rotgaussianpulse,[tg,σ,π])],g,tspan)
+plot(res2.times*1e9,levelprobs(res2.states)); xlabel("Time (ns)"); ylabel("Level Probabilities"); legend(["Ground State", "1st Excited State", "2nd Excited State"]); grid()
+savefig(joinpath("img","3levelNOT.svg"))
+clf()
+
+Π₁ = basis(3,1) * basis(3,1)' # projector for 1st level
+Hdet = Π₁ # affected by dynamical detuning
+Hdx = create(3)/2 + destroy(3)/2 # affected by Ɛˣ
+Hdy = im*create(3)/2 - im*destroy(3)/2 # affected by Ɛʸ
+
+res3 = sesolve([Hc,(Hdet,detuning,[tg,σ,π,Δ,λ]),(Hdx,DRAGx,[tg,σ,π,Δ,λ]),(Hdy,DRAGy,[tg,σ,π,Δ,λ])],g,tspan)
+plot(res3.times*1e9,levelprobs(res3.states)); xlabel("Time (ns)"); ylabel("Level Probabilities"); legend(["Ground State", "1st Excited State", "2nd Excited State"]); grid()
+savefig(joinpath("img","3levelDRAG.svg"))
+```
 
 # DRAG
 
@@ -15,14 +97,14 @@ First, we will apply a simple NOT gate to a qubit in the ground state. The hamil
 function rotgaussianpulse(t::Real,p::Vector)
     # normalized pulse centered on t=0, begins and ends at 0
     tg  = p[1] # gate time
-    σ   = p[2] # standard dev (0.5tg)
+    σ   = p[2] # standard deviation
     A   = p[3] # amplitude
     B   = inv(√(2π)*σ*erf(tg/(√(8)*σ))-tg*gaussian(0.5tg,σ)) # normalize
     Ɛˣ = A*B*(gaussian(t,σ)-gaussian(0.5tg,σ))
     return Ɛˣ
 end
 
-H = σx/2 # Hamiltonian, using natural units where ħ=1
+H = σx/2 # same as create(2)/2 + destroy(2)/2; using natural units where ħ=1
 # output
 2×2 Schrodinger.Operator{SparseMatrixCSC{Float64,Int64},1} with space dimensions 2:
  0.0  0.5
@@ -31,27 +113,6 @@ H = σx/2 # Hamiltonian, using natural units where ħ=1
 
 We are now ready to solve for the time dynamics and plot our results. We'll use parameters that are typical for Transmon qubits.
 
-```@setup plot1
-using Schrodinger, PyPlot
-function rotgaussianpulse(t::Real,p::Vector)
-    # normalized pulse centered on t=0, begins and ends at 0
-    tg  = p[1] # gate time
-    σ   = p[2] # standard dev (0.5tg)
-    A   = p[3] # amplitude
-    B   = inv(√(2π)*σ*erf(tg/(√(8)*σ))-tg*gaussian(0.5tg,σ)) # normalize
-    Ɛˣ = A*B*(gaussian(t,σ)-gaussian(0.5tg,σ))
-    return Ɛˣ
-end
-H = σx/2 # Hamiltonian
-tg = 6e-9 # gate time 6ns
-σ = 0.5tg # standard deviation of gaussian pulse
-g = basis(2,0) # begin in ground state
-tspan = (-tg/2,tg/2) # pulse centred at t=0
-res1 = sesolve([qzero(2),(H,rotgaussianpulse,[tg,σ,π])],g,tspan,saveat=linspace(-tg/2,tg/2,100))
-!isdir("img") && mkdir("img")
-plot(res1.times*1e9,levelprobs(res1.states)); xlabel("Time (ns)"); ylabel("Level Probabilities"); legend(["Ground State", "Excited State"]); grid();
-savefig(joinpath("img","qubitNOT.svg"))
-```
 ```jldoctest example1
 tg = 6e-9 # gate time 6ns
 σ = 0.5tg # standard deviation of gaussian pulse
@@ -69,28 +130,6 @@ As is expected, the system moves from the ground state to the excited state.
 
 In reality, one must worry about leakage into other states of the system, especially when dealing with short gate times. Let's see how our Gaussian pulse performs on a three-level anharmonic system. We will again work in the rotating frame at resonance with the qubit frequency. This system will have an anharmonicity $$Δ$$, which is the detuning of the 2nd excited state with respect to the drive frequency, and an additional parameter $$λ$$ describing the relative strength of the 1-2 transition compared to the 0-1 transition (see \[[1]] for more details). Let's create the Hamiltonian and perform the same time evolution.
 
-```@setup plot2
-using Schrodinger, PyPlot
-function rotgaussianpulse(t::Real,p::Vector)
-    # normalized pulse centered on t=0, begins and ends at 0
-    tg  = p[1] # gate time
-    σ   = p[2] # standard dev (0.5tg)
-    A   = p[3] # amplitude
-    B   = inv(√(2π)*σ*erf(tg/(√(8)*σ))-tg*gaussian(0.5tg,σ)) # normalize
-    Ɛˣ = A*B*(gaussian(t,σ)-gaussian(0.5tg,σ))
-    return Ɛˣ
-end
-Δ = 2π*(-400e6) # anharmonicity
-λ = √2 # relative transition strength
-Π₂ = basis(3,2) * basis(3,2)' # projector for the 2nd level
-Hc = Δ*Π₂ # constant Hamiltonian
-Hd = create(3)/2 + destroy(3)/2 # affected by Ɛˣ
-g = basis(3,0)
-res2 = sesolve([Hc,(Hd,rotgaussianpulse,[tg,σ,π])],g,tspan)
-!isdir("img") && mkdir("img")
-plot(res2.times*1e9,levelprobs(res2.states)); xlabel("Time (ns)"); ylabel("Level Probabilities"); legend(["Ground State", "1st Excited State", "2nd Excited State"]); grid()
-savefig(joinpath("img","3levelNOT.svg"))
-```
 ```jldoctest example1
 Δ = 2π*(-400e6) # anharmonicity
 λ = √2 # relative transition strength
@@ -102,27 +141,59 @@ g = basis(3,0)
 res2 = sesolve([Hc,(Hd,rotgaussianpulse,[tg,σ,π])],g,tspan)
 figure()
 plot(res2.times*1e9,levelprobs(res2.states)); xlabel("Time (ns)"); ylabel("Level Probabilities"); legend(["Ground State", "1st Excited State", "2nd Excited State"]); grid()
-savefig(joinpath("img","3levelNOT.svg"))
 ```
 ![3-level NOT gate](img/3levelNOT.svg)
 
 Instead of working perfectly, our system leaks into the 2nd energy level (we'll quantify this [later](#fidelity)). This becomes problematic once we're trying perform useful computations. DRAG is one possible remedy where introducing drive detuning and a second quadrature control, that is $$ℇ(t)=ℇ<sup>x</sup>(t)cos(ω<sub>d</sub>t)+ℇ<sup>y</sup>(t)sin(ω<sub>d</sub>t)$$, helps eliminate some of the leakage. Let's see how much of an improvement we get. We'll need to define a few more functions for the new controls.
 
-```@setup plot3
-using Schrodinger, PyPlot
-function rotgaussianpulse(t::Real,p::Vector)
-    # normalized pulse centered on t=0, begins and ends at 0
+```jldoctest example1
+function DRAGx(t::Real,p::Vector)
+    # Ɛˣ for fifth order DRAG
     tg  = p[1] # gate time
-    σ   = p[2] # standard dev (0.5tg)
+    σ   = p[2] # standard deviation
     A   = p[3] # amplitude
-    B   = inv(√(2π)*σ*erf(tg/(√(8)*σ))-tg*gaussian(0.5tg,σ)) # normalize
-    Ɛˣ = A*B*(gaussian(t,σ)-gaussian(0.5tg,σ))
+    Δ   = p[4] # anharmonicity
+    λ   = p[5] # relative strength of transitions
+    Ɛˣ = rotgaussianpulse(t,[tg,σ,A]) + (λ^2-4)*rotgaussianpulse(t,[tg,σ,A])^3/(8*Δ^2) - (13λ^4-76λ^2+112)*rotgaussianpulse(t,[tg,σ,A])^5/(128Δ^4)
     return Ɛˣ
 end
 
+function DRAGy(t::Real,p::Vector)
+    # Ɛʸ for fifth order DRAG
+    tg  = p[1] # gate time
+    σ   = p[2] # standard deviation
+    A   = p[3] # amplitude
+    Δ   = p[4] # anharmonicity
+    λ   = p[5] # relative strength of transitions
+    B   = inv(√(2π)*σ*erf(tg/(√(8)*σ))-tg*gaussian(0.5tg,σ))
+    Ɛˣ′ = A*B*Schrodinger.gaussianprime(t,σ)
+    Ɛʸ = -Ɛˣ′/Δ + 33*(λ^2-2)*rotgaussianpulse(t,[tg,σ,A])^2*Ɛˣ′/(24*Δ^3)
+    return Ɛʸ
+end
+
+function detuning(t::Real,p::Vector)
+    # dynamical detuning for fifth order DRAG
+    tg  = p[1] # gate time
+    σ   = p[2] # standard deviation
+    A   = p[3] # amplitude
+    Δ   = p[4] # anharmonicity
+    λ   = p[5] # relative strength of transitions
+    δ₁ = (λ^2-4)*rotgaussianpulse(t,[tg,σ,A])^2/(4*Δ) - (λ^4-7λ^2+12)*rotgaussianpulse(t,[tg,σ,A])^4/(16Δ^3)
+    return δ₁
+end
+
+Π₁ = basis(3,1) * basis(3,1)' # projector for 1st level
+Hdet = Π₁ # affected by dynamical detuning
+Hdx = create(3)/2 + destroy(3)/2 # affected by Ɛˣ
+Hdy = im*create(3)/2 - im*destroy(3)/2 # affected by Ɛʸ
+
+res3 = sesolve([Hc,(Hdet,detuning,[tg,σ,π,Δ,λ]),(Hdx,DRAGx,[tg,σ,π,Δ,λ]),(Hdy,DRAGy,[tg,σ,π,Δ,λ])],g,tspan)
+figure()
+plot(res3.times*1e9,levelprobs(res3.states)); xlabel("Time (ns)"); ylabel("Level Probabilities"); legend(["Ground State", "1st Excited State", "2nd Excited State"]); grid()
+savefig(joinpath("img","3levelDRAG.svg"))
 ```
-```jldoctest example1
-```
+
+There is a noticeable improvement over the simple Gaussian pulse, but how much better is the new gate?
 
 ## Fidelity
 
