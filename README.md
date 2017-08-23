@@ -1,3 +1,3 @@
 # 2017
 
-2017-08-23: DRAG Example
+2017-08-23: Schrodinger: DRAG Example
