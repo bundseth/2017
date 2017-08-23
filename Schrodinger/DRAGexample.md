@@ -84,6 +84,36 @@ Hdy = im*create(3)/2 - im*destroy(3)/2 # affected by Ɛʸ
 res3 = sesolve([Hc,(Hdet,detuning,[tg,σ,π,Δ,λ]),(Hdx,DRAGx,[tg,σ,π,Δ,λ]),(Hdy,DRAGy,[tg,σ,π,Δ,λ])],g,tspan)
 plot(res3.times*1e9,levelprobs(res3.states)); xlabel("Time (ns)"); ylabel("Level Probabilities"); legend(["Ground State", "1st Excited State", "2nd Excited State"]); grid()
 savefig(joinpath("img","3levelDRAG.svg"))
+clf()
+
+tgs = (3:9)*1e-9 # gate times
+Fg_res = Matrix{Float64}(length(tgs),2) # initialize matrix for number of solves
+axialStates  = [normalize!(Ket([1,1,0])),   # +X
+                normalize!(Ket([1,-1,0])),  # -X
+                normalize!(Ket([1,im,0])),  # +Y
+                normalize!(Ket([1,-im,0])), # -Y
+                normalize!(Ket([1,0,0])),   # +Z
+                normalize!(Ket([0,1,0]))]   # -Z
+axialOperators = [] # need density operators too
+for i = 1:6
+    push!(axialOperators,axialStates[i]*axialStates[i]')
+end
+Uideal = complex(qzero(3)); Uideal[1:2,1:2] = data(σx)
+for (i,tg) in enumerate(tgs)
+    sum1 = 0 # sum of Gaussian gate fidelities
+    sum2 = 0 # sum of DRAG gate fidelities
+    for j = 1:6
+        # Gaussian
+        res4_1 = sesolve([Hc,(Hd,rotgaussianpulse,[tg,σ,π])],axialStates[j],(-tg/2,tg/2))
+        sum1 += trace(Uideal*axialOperators[j]*Uideal'*(res4_1.states[end]*res4_1.states[end]'))
+        # DRAG
+        res4_2 = sesolve([Hc,(Hdet,detuning,[tg,σ,π,Δ,λ]),(Hdx,DRAGx,[tg,σ,π,Δ,λ]),(Hdy,DRAGy,[tg,σ,π,Δ,λ])],axialStates[j],(-tg/2,tg/2))
+        sum2 += trace(Uideal*axialOperators[j]*Uideal'*(res4_2.states[end]*res4_2.states[end]'))
+    end
+    Fg_res[i,:] = [sum1/6 sum2/6] # take average
+end
+plot(tgs*1e9,1.-Fg_res); ylim([10e-8,1]); title("Average gate fidelity averaging over all input states"); yscale("log"); xlabel("Gate Time (ns)"); ylabel("Gate Error 1-Fg"); legend(["Gaussian","DRAG 5th Order"]); grid()
+savefig(joinpath("img","fidelities.svg"))
 ```
 
 # DRAG
@@ -144,7 +174,7 @@ plot(res2.times*1e9,levelprobs(res2.states)); xlabel("Time (ns)"); ylabel("Level
 ```
 ![3-level NOT gate](img/3levelNOT.svg)
 
-Instead of working perfectly, our system leaks into the 2nd energy level (we'll quantify this [later](#fidelity)). This becomes problematic once we're trying perform useful computations. DRAG is one possible remedy where introducing drive detuning and a second quadrature control, that is $$ℇ(t)=ℇ<sup>x</sup>(t)cos(ω<sub>d</sub>t)+ℇ<sup>y</sup>(t)sin(ω<sub>d</sub>t)$$, helps eliminate some of the leakage. Let's see how much of an improvement we get. We'll need to define a few more functions for the new controls.
+Instead of working perfectly, our system leaks into the 2nd energy level (we'll quantify this [later](#fidelity)). This becomes problematic when we're trying perform useful computations. DRAG is one possible remedy where introducing drive detuning and a second quadrature control, that is $$ℇ(t)=ℇ<sup>x</sup>(t)cos(ω<sub>d</sub>t)+ℇ<sup>y</sup>(t)sin(ω<sub>d</sub>t)$$, helps eliminate some of the leakage. Let's see how much of an improvement we get. We'll need to define a few more functions for the new controls.
 
 ```jldoctest example1
 function DRAGx(t::Real,p::Vector)
@@ -190,14 +220,48 @@ Hdy = im*create(3)/2 - im*destroy(3)/2 # affected by Ɛʸ
 res3 = sesolve([Hc,(Hdet,detuning,[tg,σ,π,Δ,λ]),(Hdx,DRAGx,[tg,σ,π,Δ,λ]),(Hdy,DRAGy,[tg,σ,π,Δ,λ])],g,tspan)
 figure()
 plot(res3.times*1e9,levelprobs(res3.states)); xlabel("Time (ns)"); ylabel("Level Probabilities"); legend(["Ground State", "1st Excited State", "2nd Excited State"]); grid()
-savefig(joinpath("img","3levelDRAG.svg"))
 ```
+![3-level DRAG](img/3levelDRAG.svg)
 
 There is a noticeable improvement over the simple Gaussian pulse, but how much better is the new gate?
 
 ## Fidelity
 
-TODO
+We can calculate the fidelity of our gates by comparing their output to the ideal case. Our gates behave ideally when $$λ=0$$ and there is no leakage into the 2nd excited state. Using the same measure of error as in \[[1]], we can take the overall gate fidelity to be the average of gate fidelities when using the 6 axial states on the Bloch sphere as input.
+
+```jldoctest example1
+tgs = (3:9)*1e-9 # gate times
+Fg_res = Matrix{Float64}(length(tgs),2) # initialize matrix for number of solves
+axialStates  = [normalize!(Ket([1,1,0])),   # +X
+                normalize!(Ket([1,-1,0])),  # -X
+                normalize!(Ket([1,im,0])),  # +Y
+                normalize!(Ket([1,-im,0])), # -Y
+                normalize!(Ket([1,0,0])),   # +Z
+                normalize!(Ket([0,1,0]))]   # -Z
+axialOperators = [] # need density operators too
+for i = 1:6
+    push!(axialOperators,axialStates[i]*axialStates[i]')
+end
+Uideal = complex(qzero(3)); Uideal[1:2,1:2] = data(σx)
+for (i,tg) in enumerate(tgs)
+    sum1 = 0 # sum of Gaussian gate fidelities
+    sum2 = 0 # sum of DRAG gate fidelities
+    for j = 1:6
+        # Gaussian
+        res4_1 = sesolve([Hc,(Hd,rotgaussianpulse,[tg,σ,π])],axialStates[j],(-tg/2,tg/2))
+        sum1 += trace(Uideal*axialOperators[j]*Uideal'*(res4_1.states[end]*res4_1.states[end]'))
+        # DRAG
+        res4_2 = sesolve([Hc,(Hdet,detuning,[tg,σ,π,Δ,λ]),(Hdx,DRAGx,[tg,σ,π,Δ,λ]),(Hdy,DRAGy,[tg,σ,π,Δ,λ])],axialStates[j],(-tg/2,tg/2))
+        sum2 += trace(Uideal*axialOperators[j]*Uideal'*(res4_2.states[end]*res4_2.states[end]'))
+    end
+    Fg_res[i,:] = [sum1/6 sum2/6] # take average
+end
+figure()
+plot(tgs*1e9,1.-Fg_res); ylim([10e-8,1]); title("Average gate fidelity averaging over all input states"); yscale("log"); xlabel("Gate Time (ns)"); ylabel("Gate Error 1-Fg"); legend(["Gaussian","DRAG 5th Order"]); grid()
+```
+![NOT-gate fidelities](img/fidelities.svg)
+
+For a gate time of 6ns, taking advantage of DRAG results in a gate error that is 2 orders of magnitude less than when using Gaussian pulses.
 
 ## References
 
