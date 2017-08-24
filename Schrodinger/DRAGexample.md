@@ -227,7 +227,7 @@ There is a noticeable improvement over the simple Gaussian pulse, but how much b
 
 ## Fidelity
 
-We can calculate the fidelity of our gates by comparing their output to the ideal case. Our gates behave ideally when $$λ=0$$ and there is no leakage into the 2nd excited state. Using the same measure of error as in \[[1]], we can take the overall gate fidelity to be the average of gate fidelities when using the 6 axial states on the Bloch sphere as input.
+We can calculate the fidelity of our gates by comparing their output to the ideal case. Our gates behave ideally when $$λ=0$$ and there is no leakage into the 2nd excited state. Using the same measure of error as in \[[1]], we can take the overall gate fidelity to be the average of gate fidelities when using the 6 axial states on the Bloch sphere as inputs.
 
 ```jldoctest example1
 tgs = (3:9)*1e-9 # gate times
@@ -265,6 +265,6 @@ For a gate time of 6ns, taking advantage of DRAG results in a gate error that is
 
 ## References
 
-\[[1]] F. Motzoi, J.M. Gambetta, P. Rebentrost, and F. K. Wilhelm, "Simple pulses for elimination of leakage in weakly nonlinear qubits," Phys. Rev. Lett.
+\[[1]] F. Motzoi, J.M. Gambetta, P. Rebentrost, and F. K. Wilhelm, "Simple pulses for elimination of leakage in weakly nonlinear qubits," Phys. Rev. Lett. 103, 110501 (2009).
 
 [1]: http://dx.doi.org/10.1103/PhysRevLett.103.110501
